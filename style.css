@@ -1,0 +1,48 @@
+/* ── Global Font ─────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+/* ── Main background ─────────────────────────────────────────────────────── */
+.main {
+    background-color: #f5f7fa;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    background-color: #1a1a2e;
+}
+[data-testid="stSidebar"] * {
+    color: #e0e0e0 !important;
+}
+[data-testid="stSidebar"] a {
+    color: #a29bfe !important;
+    text-decoration: none;
+}
+
+/* ── Metric cards ────────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border-left: 4px solid #6c63ff;
+}
+
+/* ── Headings ────────────────────────────────────────────────────────────── */
+h1 { color: #1a1a2e; }
+h2, h3 { color: #2d2d44; }
+
+/* ── Dataframe ───────────────────────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* ── Info / warning / success boxes ─────────────────────────────────────── */
+[data-testid="stAlert"] {
+    border-radius: 10px;
+}
