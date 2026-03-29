@@ -1,11 +1,10 @@
 import streamlit as st
-import os
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from utils.style import apply_theme
 
-# Load shared CSS
-with open(os.path.join(os.path.dirname(__file__), "..", "style.css")) as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+st.set_page_config(page_title="Price", page_icon="💰", layout="wide")
+apply_theme()
 
-st.title("💰 Price")
-st.markdown("---")
-st.info("Price analysis charts will be built here in the next step.", icon="🔧")
-
+st.title("💰 Price Analysis")
+st.info("This page will show price trends and analysis. Coming soon!", icon="🔧")

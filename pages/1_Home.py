@@ -1,32 +1,52 @@
 import streamlit as st
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from utils.data_loader import load_data
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from utils.style import apply_theme
 
-# Load shared CSS
-with open(os.path.join(os.path.dirname(__file__), "..", "style.css")) as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+st.set_page_config(
+    page_title="ABM Inventory Dashboard",
+    page_icon="🏠",
+    layout="wide",
+)
+apply_theme()
 
-df = load_data()
-
-st.title("🏠 Home")
-st.markdown("Welcome to the **Grad Project Dashboard**. Use the sidebar to navigate between sections.")
+# ── Title ─────────────────────────────────────────────────────────────────────
+st.title("🎓 Integrated ML & OR Approach to Adaptive Inventory Lot Sizing for ABM Eşyaları")
 st.markdown("---")
 
-# ── KPI Cards ─────────────────────────────────────────────────────────────────
-st.markdown("### 📌 Dataset Overview")
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Rows",    f"{len(df):,}")
-col2.metric("Total Columns", f"{df.shape[1]}")
-col3.metric("Missing Values",f"{df.isnull().sum().sum():,}")
+# ── Project Description ───────────────────────────────────────────────────────
+st.subheader("📌 About This Project")
+st.markdown(
+    """
+    This dashboard provides an end-to-end analysis and forecasting tool built for the
+    graduation project. It loads real-world data from an Excel file and allows you to:
 
-# ── Column Summary ─────────────────────────────────────────────────────────────
-st.markdown("### 🗂️ Column Summary")
-import pandas as pd
-summary = pd.DataFrame({
-    "Column":    df.columns,
-    "Type":      df.dtypes.values,
-    "Non-Null":  df.notnull().sum().values,
-    "Nulls":     df.isnull().sum().values,
-})
-st.dataframe(summary, use_container_width=True, hide_index=True)
+    - 🔍 **Explore raw data** with filters and statistics
+    - 💰 **Analyse price trends** over time
+    - 🔮 **Forecast using Prophet** – a time-series model by Meta
+    - 🤖 **Forecast using XGBoost** – a gradient-boosted tree model
+    - 📈 **Forecast using PX** – an additional forecasting approach
+    """
+)
+
+st.markdown("---")
+
+# ── Instructions ─────────────────────────────────────────────────────────────
+st.subheader("🗺️ How to Use")
+st.markdown(
+    """
+    1. **Navigate** using the sidebar on the left — click any page name to open it.
+    2. Start with **Raw Data** to verify the loaded dataset looks correct.
+    3. Move to **Price** to explore price behaviour across the dataset.
+    4. Use the **Forecast** pages to generate and compare predictions.
+    5. All pages read from `Grad Proj.xlsx` placed in the same folder as this app.
+    """
+)
+
+st.info(
+    "💡 Make sure `Grad Proj.xlsx` is present in the project folder before navigating to any data page.",
+    icon="📁",
+)
+
+st.markdown("---")
+st.caption("Graduation Project Dashboard · Built with Streamlit")
