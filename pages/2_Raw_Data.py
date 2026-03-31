@@ -313,5 +313,49 @@ with st.expander("❌ Delete Product", expanded=False):
                 st.rerun()
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 4 – 🔧 Engine Preview (Debug)
+# ═══════════════════════════════════════════════════════════════════════════════
+with st.expander("🔧 Engine Preview (Debug)", expanded=False):
+    st.caption(
+        "Runs the full data preparation pipeline and shows the resulting "
+        "**long-format** time-series used by all forecast models."
+    )
+    try:
+        from utils.data_prep import prepare_long_format, validate_raw_df
+
+        ok, msg = validate_raw_df(df)
+        if not ok:
+            st.error(f"Validation failed: {msg}")
+        else:
+            df_long = prepare_long_format(df)
+
+            # ── Quick stats ───────────────────────────────────────────────────
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total rows",     f"{len(df_long):,}")
+            c2.metric("Products",       f"{df_long['Product'].nunique():,}")
+            c3.metric("Date start",     str(df_long["Date"].min().date()))
+            c4.metric("Date end",       str(df_long["Date"].max().date()))
+
+            # ── Full table ────────────────────────────────────────────────────
+            st.dataframe(
+                df_long,
+                use_container_width=True,
+                height=400,
+                column_config={
+                    "Date":    st.column_config.DateColumn("Date",    format="YYYY-MM-DD"),
+                    "Product": st.column_config.TextColumn("Product"),
+                    "Month":   st.column_config.NumberColumn("Month #", format="%d"),
+                    "Demand":  st.column_config.NumberColumn("Demand",  format="%d"),
+                },
+            )
+            st.caption(
+                "Imputation: NaN → 0  |  Baseline: 2020-01-01  |  "
+                f"Shape: {df_long.shape[0]:,} rows × {df_long.shape[1]} cols"
+            )
+    except Exception as exc:
+        st.error(f"Pipeline error: {exc}")
+
 st.markdown("---")
 st.caption("ABM Inventory Dashboard · Raw Data")
+
