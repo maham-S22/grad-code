@@ -65,12 +65,22 @@ class ExcelManager:
             dir=os.path.dirname(EXCEL_PATH),
         )
         try:
-            os.close(tmp_fd)                  # close the raw fd; openpyxl will open by path
+            os.close(tmp_fd)                  # close raw fd; openpyxl opens by path
             with pd.ExcelWriter(tmp_path, engine="openpyxl") as writer:
                 for name, frame in all_sheets.items():
                     frame.to_excel(writer, sheet_name=name, index=False)
-            shutil.move(tmp_path, EXCEL_PATH)  # atomic replacement
+            # os.replace is atomic on the same drive and works better than
+            # shutil.move on Windows when the destination already exists
+            os.replace(tmp_path, EXCEL_PATH)
             return True
+        except PermissionError:
+            st.error(
+                "🔒 **Permission denied** — `Grad Proj.xlsx` is open in Excel (or another "
+                "program). **Close the file in Excel** and try again."
+            )
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            return False
         except Exception as e:
             st.error(f"Save failed: {e}")
             if os.path.exists(tmp_path):
