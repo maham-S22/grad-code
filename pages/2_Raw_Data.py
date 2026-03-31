@@ -1,5 +1,6 @@
 """
 pages/2_Raw_Data.py  –  Phase 2 (Full CRUD: Add, Edit, Delete)
+All three sections wrapped in expanders. Explicit undo mechanisms.
 """
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -12,7 +13,7 @@ from utils.data_loader import ExcelManager, TOTAL_MONTHS
 st.set_page_config(page_title="Raw Data – ABM Dashboard", page_icon="📋", layout="wide")
 apply_theme()
 
-# ── Red danger-button CSS (scoped to [data-testid="stBaseButton-secondary"]) ──
+# ── Red danger-button CSS  (targets type="secondary" buttons only) ─────────────
 st.markdown("""
 <style>
 [data-testid="stBaseButton-secondary"] {
@@ -30,8 +31,8 @@ st.markdown("""
 
 ExcelManager.load_all()
 
-# ── Session-state keys ────────────────────────────────────────────────────────
-for key, default in [
+# ── Session-state initialisation ─────────────────────────────────────────────
+for _key, _default in [
     ("pending_save",        False),
     ("validation_error",    None),
     ("new_product_name",    ""),
@@ -39,12 +40,12 @@ for key, default in [
     ("current_month_value", 0),
     ("confirm_delete",      False),
 ]:
-    if key not in st.session_state:
-        st.session_state[key] = default
+    if _key not in st.session_state:
+        st.session_state[_key] = _default
 
-# ── Load working copy ─────────────────────────────────────────────────────────
+# ── Page header ───────────────────────────────────────────────────────────────
 st.title("📋 Raw Data")
-st.markdown(f"Source: **Raw Data** sheet · Months 1–{TOTAL_MONTHS}")
+st.markdown(f"Source: **Raw Data** sheet · Months 1 – {TOTAL_MONTHS}")
 st.markdown("---")
 
 df = ExcelManager.get_raw_data()
@@ -55,15 +56,18 @@ if df.empty:
 MONTH_COLS = [str(i) for i in range(1, TOTAL_MONTHS + 1)]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 1 – Add New Product  (sequential month entry)
+# SECTION 1 – ➕ Add New Product  (sequential month entry)
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.expander("➕ Add New Product", expanded=False):
+
+    # Product name (persisted in session_state across reruns)
     st.session_state["new_product_name"] = st.text_input(
         "Product Name / Code",
         value=st.session_state["new_product_name"],
         placeholder="e.g. A 999 XX",
         key="product_name_input",
     )
+
     months_entered = len(st.session_state["temp_monthly_data"])
     next_month     = months_entered + 1
     st.markdown("---")
@@ -74,8 +78,11 @@ with st.expander("➕ Add New Product", expanded=False):
         with col_input:
             month_val = st.number_input(
                 f"Month {next_month} demand",
-                min_value=0, value=st.session_state["current_month_value"],
-                step=1, key="seq_month_input", label_visibility="collapsed",
+                min_value=0,
+                value=st.session_state["current_month_value"],
+                step=1,
+                key="seq_month_input",
+                label_visibility="collapsed",
             )
         with col_add:
             if st.button("➕ Add Month", use_container_width=True, type="primary"):
@@ -83,28 +90,45 @@ with st.expander("➕ Add New Product", expanded=False):
                 st.session_state["current_month_value"] = 0
                 st.rerun()
         with col_undo:
-            if st.button("↩️ Undo", use_container_width=True,
-                         disabled=months_entered == 0, type="primary"):
+            # Undo Logic 2: pop last value from temp_monthly_data
+            if st.button(
+                "↩️ Undo Last Month",
+                use_container_width=True,
+                type="primary",
+                disabled=months_entered == 0,
+                help="Remove the last entered month value and re-enter it.",
+            ):
                 st.session_state["temp_monthly_data"].pop()
                 st.rerun()
     else:
         st.success(f"✅ All {TOTAL_MONTHS} months entered! Ready to save.")
 
-    st.progress(months_entered / TOTAL_MONTHS,
-                text=f"{months_entered} / {TOTAL_MONTHS} months filled")
+    st.progress(
+        months_entered / TOTAL_MONTHS,
+        text=f"{months_entered} / {TOTAL_MONTHS} months filled",
+    )
 
     if st.session_state["temp_monthly_data"]:
         st.markdown("**📊 Live Preview:**")
         st.dataframe(
-            pd.DataFrame({f"M{i+1}": [v]
-                          for i, v in enumerate(st.session_state["temp_monthly_data"])}),
-            use_container_width=True, hide_index=True,
+            pd.DataFrame({
+                f"M{i+1}": [v]
+                for i, v in enumerate(st.session_state["temp_monthly_data"])
+            }),
+            use_container_width=True,
+            hide_index=True,
         )
+
     st.markdown("---")
 
     can_save = bool(st.session_state["new_product_name"].strip()) and months_entered > 0
-    if st.button("💾 Save Changes to Excel", type="primary",
-                 disabled=not can_save, use_container_width=True, key="seq_save_btn"):
+    if st.button(
+        "💾 Save Changes to Excel",
+        type="primary",
+        disabled=not can_save,
+        use_container_width=True,
+        key="seq_save_btn",
+    ):
         pname = st.session_state["new_product_name"].strip()
         if pname in df["Period"].astype(str).values:
             st.warning(f"⚠️ **{pname}** already exists — edit it in the table below.")
@@ -124,20 +148,22 @@ with st.expander("➕ Add New Product", expanded=False):
             else:
                 st.error("❌ Save failed — check the Excel file is not open elsewhere.")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 2 – Inline Edit via st.data_editor  (on_change validation + save)
-# ═══════════════════════════════════════════════════════════════════════════════
-st.subheader("✏️ Edit Monthly Data")
-st.caption("Double-click any cell to edit. Validated on every change.")
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 2 – ✏️ Edit Existing Data  (on_change validation + queued save)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Column config (defined at module scope — no Streamlit rendering)
 column_config: dict = {
     "Period": st.column_config.TextColumn("Product", width="medium", disabled=True),
 }
-for m in range(1, TOTAL_MONTHS + 1):
-    column_config[str(m)] = st.column_config.NumberColumn(
-        f"M{m}", min_value=0, step=1, format="%d", width="small",
+for _m in range(1, TOTAL_MONTHS + 1):
+    column_config[str(_m)] = st.column_config.NumberColumn(
+        f"M{_m}", min_value=0, step=1, format="%d", width="small",
     )
 
+
+# on_change callback (module scope — validates and sets pending_save flag)
 def _on_editor_change():
     edits: dict = st.session_state.get("raw_editor", {})
     for _idx, row_edits in edits.get("edited_rows", {}).items():
@@ -148,7 +174,8 @@ def _on_editor_change():
                 int(float(str(val)))
             except (ValueError, TypeError):
                 st.session_state["validation_error"] = (
-                    f"Invalid value in Month {col}: `{val}` is not a number.")
+                    f"Invalid value in Month {col}: `{val}` is not a number."
+                )
                 st.session_state["pending_save"] = False
                 return
     for added in edits.get("added_rows", []):
@@ -159,81 +186,95 @@ def _on_editor_change():
                 int(float(str(val)))
             except (ValueError, TypeError):
                 st.session_state["validation_error"] = (
-                    f"Invalid value in Month {col}: `{val}` is not a number.")
+                    f"Invalid value in Month {col}: `{val}` is not a number."
+                )
                 st.session_state["pending_save"] = False
                 return
     st.session_state["validation_error"] = None
     st.session_state["pending_save"]     = True
 
-if st.session_state["validation_error"]:
-    st.error(f"🚫 {st.session_state['validation_error']}")
-if st.session_state["pending_save"]:
-    st.warning("⚠️ You have unsaved changes — press **Save Edits to Excel** below.", icon="💾")
 
-edit_cols = ["Period"] + MONTH_COLS
-edited_df: pd.DataFrame = st.data_editor(
-    df[edit_cols].copy(),
-    column_config=column_config,
-    num_rows="dynamic",
-    use_container_width=True,
-    height=420,
-    key="raw_editor",
-    on_change=_on_editor_change,
-)
+# All rendering for Section 2 happens inside this expander
+with st.expander("✏️ Edit Existing Data", expanded=False):
+    st.caption("Double-click any cell to edit values. Changes are validated on every keystroke.")
 
-col_save, col_discard, _ = st.columns([2, 1, 4])
-with col_save:
-    if st.button(
-        "💾 Save Edits to Excel", type="primary",
-        disabled=not st.session_state["pending_save"], use_container_width=True,
-    ):
-        for col in MONTH_COLS:
-            if col in edited_df.columns:
-                edited_df[col] = (pd.to_numeric(edited_df[col], errors="coerce")
-                                  .fillna(0).astype(int))
-        if ExcelManager.save_raw_data(edited_df):
+    if st.session_state["validation_error"]:
+        st.error(f"🚫 {st.session_state['validation_error']}")
+    if st.session_state["pending_save"]:
+        st.warning("⚠️ You have unsaved changes — press **Save Edits to Excel** below.", icon="💾")
+
+    edit_cols   = ["Period"] + MONTH_COLS
+    edited_df: pd.DataFrame = st.data_editor(
+        df[edit_cols].copy(),
+        column_config=column_config,
+        num_rows="dynamic",
+        use_container_width=True,
+        height=420,
+        key="raw_editor",
+        on_change=_on_editor_change,
+    )
+
+    col_save, col_discard, _ = st.columns([2, 2, 3])
+    with col_save:
+        if st.button(
+            "💾 Save Edits to Excel",
+            type="primary",
+            disabled=not st.session_state["pending_save"],
+            use_container_width=True,
+        ):
+            for col in MONTH_COLS:
+                if col in edited_df.columns:
+                    edited_df[col] = (
+                        pd.to_numeric(edited_df[col], errors="coerce")
+                        .fillna(0).astype(int)
+                    )
+            if ExcelManager.save_raw_data(edited_df):
+                st.session_state["pending_save"]     = False
+                st.session_state["validation_error"] = None
+                st.success("✅ Edits saved to Excel successfully!")
+                st.rerun()
+            else:
+                st.error("❌ Save failed — close the Excel file if it's open elsewhere.")
+
+    with col_discard:
+        # Undo Logic 1: re-read from disk, discard all pending edits
+        if st.button(
+            "↩️ Discard Unsaved Changes (Undo)",
+            type="primary",
+            disabled=not st.session_state["pending_save"],
+            use_container_width=True,
+            help="Re-reads Raw Data from Grad Proj.xlsx — discards all uncommitted edits.",
+        ):
+            ExcelManager.load_all(force=True)          # restore from disk
             st.session_state["pending_save"]     = False
             st.session_state["validation_error"] = None
-            st.success("✅ Edits saved to Excel successfully!")
             st.rerun()
-        else:
-            st.error("❌ Save failed — close the Excel file if it's open elsewhere.")
-with col_discard:
-    if st.button(
-        "↩️ Discard", type="primary",
-        disabled=not st.session_state["pending_save"], use_container_width=True,
-    ):
-        ExcelManager.load_all(force=True)
-        st.session_state["pending_save"]     = False
-        st.session_state["validation_error"] = None
-        st.rerun()
 
-st.markdown("---")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 – Delete Product
-# (secondary button type is styled red via CSS at top of page)
+# SECTION 3 – ❌ Delete Product
+# (type="secondary" → styled red by CSS at top of page)
 # ═══════════════════════════════════════════════════════════════════════════════
-with st.expander("🗑️ Delete Product", expanded=False):
-    product_list = df["Period"].astype(str).tolist()
+with st.expander("❌ Delete Product", expanded=False):
+    product_list       = df["Period"].astype(str).tolist()
     selected_to_delete = st.selectbox(
         "Select product to delete", options=product_list, key="delete_selectbox"
     )
-
     st.session_state["confirm_delete"] = st.checkbox(
-        f'I confirm I want to permanently delete **{selected_to_delete}** from the dataset.',
+        f"I confirm I want to permanently delete **{selected_to_delete}**.",
         value=st.session_state["confirm_delete"],
         key="confirm_delete_checkbox",
     )
-
     if st.button(
         "🗑️ Delete Selected Product",
-        type="secondary",           # ← styled red via CSS injected at page top
+        type="secondary",       # ← CSS above makes this button red
         disabled=not st.session_state["confirm_delete"],
-        use_container_width=False,
         key="delete_product_btn",
     ):
-        df_updated = df[df["Period"].astype(str) != selected_to_delete].reset_index(drop=True)
+        df_updated = (
+            df[df["Period"].astype(str) != selected_to_delete]
+            .reset_index(drop=True)
+        )
         if ExcelManager.save_raw_data(df_updated):
             st.success(f"✅ **{selected_to_delete}** deleted and Excel updated.")
             st.session_state["confirm_delete"] = False
@@ -241,6 +282,7 @@ with st.expander("🗑️ Delete Product", expanded=False):
             st.rerun()
         else:
             st.error("❌ Delete failed — close the Excel file if it's open elsewhere.")
+
 
 st.markdown("---")
 st.caption("ABM Inventory Dashboard · Raw Data")
