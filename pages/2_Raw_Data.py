@@ -139,7 +139,7 @@ with st.expander("➕ Add New Product", expanded=False):
                 new_row[str(i + 1)] = values[i] if i < len(values) else 0
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             if ExcelManager.save_raw_data(df):
-                st.success(f"✅ **{pname}** saved to Excel!")
+                st.toast(f"✅ **{pname}** saved to Excel!", icon="🌸")
                 st.session_state["new_product_name"]    = ""
                 st.session_state["temp_monthly_data"]   = []
                 st.session_state["current_month_value"] = 0
@@ -231,7 +231,7 @@ with st.expander("✏️ Edit Existing Data", expanded=False):
             if ExcelManager.save_raw_data(edited_df):
                 st.session_state["pending_save"]     = False
                 st.session_state["validation_error"] = None
-                st.success("✅ Edits saved to Excel successfully!")
+                st.toast("Excel updated successfully!", icon="🌸")
                 st.rerun()
             else:
                 st.error("❌ Save failed — close the Excel file if it's open elsewhere.")
@@ -276,7 +276,7 @@ with st.expander("❌ Delete Product", expanded=False):
             .reset_index(drop=True)
         )
         if ExcelManager.save_raw_data(df_updated):
-            st.success(f"✅ **{selected_to_delete}** deleted and Excel updated.")
+            st.toast(f"✅ **{selected_to_delete}** deleted — Excel updated.", icon="🌸")
             st.session_state["confirm_delete"] = False
             df = ExcelManager.get_raw_data()
             st.rerun()
