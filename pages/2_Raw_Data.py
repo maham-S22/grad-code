@@ -35,39 +35,108 @@ if df.empty:
 
 MONTH_COLS = [str(i) for i in range(1, TOTAL_MONTHS + 1)]
 
+# ── Session-state for sequential product entry ────────────────────────────────
+if "new_product_name" not in st.session_state:
+    st.session_state["new_product_name"] = ""
+if "temp_monthly_data" not in st.session_state:
+    st.session_state["temp_monthly_data"] = []
+if "current_month_value" not in st.session_state:
+    st.session_state["current_month_value"] = 0
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 1 – Add New Product
+# SECTION 1 – Add New Product  (sequential month entry)
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.expander("➕ Add New Product", expanded=False):
-    with st.form("add_product_form", clear_on_submit=True):
-        new_name = st.text_input("Product Name / Code", placeholder="e.g. A 999 XX")
-        st.caption("Monthly demand – Month 1 → 60 (leave 0, edit in table below).")
-        cols_per_row = 6
-        month_values: dict[str, int] = {}
-        for row_start in range(0, TOTAL_MONTHS, cols_per_row):
-            row_cols = st.columns(cols_per_row)
-            for i, col in enumerate(row_cols):
-                m = row_start + i + 1
-                if m <= TOTAL_MONTHS:
-                    month_values[str(m)] = col.number_input(
-                        f"M{m}", min_value=0, value=0, step=1, key=f"add_m{m}"
-                    )
-        submitted = st.form_submit_button("✅ Add Product", use_container_width=True)
 
-    if submitted:
-        name = new_name.strip()
-        if not name:
-            st.warning("⚠️ Please enter a product name.")
-        elif name in df["Period"].astype(str).values:
-            st.warning(f"⚠️ **{name}** already exists — edit it in the table below.")
+    # ── Step 1: Product name ──────────────────────────────────────────────────
+    st.session_state["new_product_name"] = st.text_input(
+        "Product Name / Code",
+        value=st.session_state["new_product_name"],
+        placeholder="e.g. A 999 XX",
+        key="product_name_input",
+    )
+
+    months_entered = len(st.session_state["temp_monthly_data"])
+    next_month = months_entered + 1
+
+    st.markdown("---")
+
+    # ── Step 2: Sequential month entry ───────────────────────────────────────
+    if next_month <= TOTAL_MONTHS:
+        st.markdown(f"**📅 Enter value for Month {next_month}** of {TOTAL_MONTHS}")
+        col_input, col_add, col_undo = st.columns([3, 1, 1])
+        with col_input:
+            month_val = st.number_input(
+                f"Month {next_month} demand",
+                min_value=0,
+                value=st.session_state["current_month_value"],
+                step=1,
+                key=f"seq_month_input",
+                label_visibility="collapsed",
+            )
+        with col_add:
+            if st.button("➕ Add Month", use_container_width=True, type="primary"):
+                st.session_state["temp_monthly_data"].append(int(month_val))
+                st.session_state["current_month_value"] = 0
+                st.rerun()
+        with col_undo:
+            if st.button(
+                "↩️ Undo", use_container_width=True,
+                disabled=months_entered == 0,
+            ):
+                st.session_state["temp_monthly_data"].pop()
+                st.rerun()
+    else:
+        st.success(f"✅ All {TOTAL_MONTHS} months entered! Ready to save.")
+
+    # ── Progress bar ──────────────────────────────────────────────────────────
+    st.progress(months_entered / TOTAL_MONTHS, text=f"{months_entered} / {TOTAL_MONTHS} months filled")
+
+    # ── Live preview ──────────────────────────────────────────────────────────
+    if st.session_state["temp_monthly_data"]:
+        st.markdown("**📊 Live Preview:**")
+        preview = {
+            f"M{i+1}": [v]
+            for i, v in enumerate(st.session_state["temp_monthly_data"])
+        }
+        st.dataframe(pd.DataFrame(preview), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # ── Save to Excel ─────────────────────────────────────────────────────────
+    can_save = (
+        bool(st.session_state["new_product_name"].strip())
+        and months_entered > 0
+    )
+    if st.button(
+        "💾 Save Changes to Excel",
+        type="primary",
+        disabled=not can_save,
+        use_container_width=True,
+        key="seq_save_btn",
+    ):
+        pname = st.session_state["new_product_name"].strip()
+        if pname in df["Period"].astype(str).values:
+            st.warning(f"⚠️ **{pname}** already exists — edit it in the table below.")
         else:
-            new_row = {"Period": name} | month_values
+            # Build new row: pad missing months with 0
+            values = st.session_state["temp_monthly_data"]
+            new_row = {"Period": pname}
+            for i in range(TOTAL_MONTHS):
+                new_row[str(i + 1)] = values[i] if i < len(values) else 0
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             if ExcelManager.save_raw_data(df):
-                st.success(f"✅ **{name}** added and saved!")
+                st.success(f"✅ **{pname}** saved to Excel successfully!")
+                # Reset state
+                st.session_state["new_product_name"] = ""
+                st.session_state["temp_monthly_data"] = []
+                st.session_state["current_month_value"] = 0
                 df = ExcelManager.get_raw_data()
+                st.rerun()
             else:
-                st.error("Save failed.")
+                st.error("❌ Save failed — check the Excel file is not open elsewhere.")
+
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 2 – Inline editable table  (on_change validation + queued save)
