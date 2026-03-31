@@ -39,6 +39,7 @@ for _key, _default in [
     ("temp_monthly_data",   []),
     ("current_month_value", 0),
     ("confirm_delete",      False),
+    ("last_deleted_row",    None),   # stores last deleted row for undo
 ]:
     if _key not in st.session_state:
         st.session_state[_key] = _default
@@ -267,21 +268,49 @@ with st.expander("❌ Delete Product", expanded=False):
     )
     if st.button(
         "🗑️ Delete Selected Product",
-        type="secondary",       # ← CSS above makes this button red
+        type="secondary",
         disabled=not st.session_state["confirm_delete"],
         key="delete_product_btn",
     ):
-        df_updated = (
+        # Capture the row BEFORE deleting (enables undo)
+        deleted_row = df[df["Period"].astype(str) == selected_to_delete]
+        df_updated  = (
             df[df["Period"].astype(str) != selected_to_delete]
             .reset_index(drop=True)
         )
         if ExcelManager.save_raw_data(df_updated):
+            st.session_state["last_deleted_row"] = deleted_row  # store for undo
+            st.session_state["confirm_delete"]   = False
             st.toast(f"✅ **{selected_to_delete}** deleted — Excel updated.", icon="🌸")
-            st.session_state["confirm_delete"] = False
             df = ExcelManager.get_raw_data()
             st.rerun()
         else:
             st.error("❌ Delete failed — close the Excel file if it's open elsewhere.")
+
+    # ↩️ Undo Delete — shown only when a row was recently deleted
+    if st.session_state["last_deleted_row"] is not None:
+        deleted_name = str(
+            st.session_state["last_deleted_row"]["Period"].values[0]
+        )
+        st.info(f"🗑️ Last deleted: **{deleted_name}**", icon="↩️")
+        col_undo_del, col_clear = st.columns([1, 3])
+        with col_undo_del:
+            if st.button("↩️ Undo Delete", type="primary", use_container_width=True):
+                df_restored = pd.concat(
+                    [ExcelManager.get_raw_data(),
+                     st.session_state["last_deleted_row"]],
+                    ignore_index=True,
+                )
+                if ExcelManager.save_raw_data(df_restored):
+                    st.session_state["last_deleted_row"] = None
+                    st.toast(f"✅ **{deleted_name}** restored!", icon="🌸")
+                    st.rerun()
+                else:
+                    st.error("❌ Restore failed — close Excel and try again.")
+        with col_clear:
+            if st.button("❌ Dismiss", use_container_width=False):
+                st.session_state["last_deleted_row"] = None
+                st.rerun()
 
 
 st.markdown("---")
