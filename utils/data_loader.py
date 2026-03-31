@@ -88,17 +88,19 @@ class ExcelManager:
         if df.columns[0] != "Period":
             df.rename(columns={df.columns[0]: "Period"}, inplace=True)
 
-        # Expand to 60 months — existing cols are "1".."36"
-        existing = [c for c in df.columns if str(c).isdigit()]
-        max_existing = max((int(c) for c in existing), default=0)
+        # ── Coerce ALL column names to strings (pandas reads numeric headers as int) ──
+        df.columns = [str(c) for c in df.columns]
+
+        # Expand to 60 months — after rename, existing month cols are '1'..'36'
+        existing_months = [c for c in df.columns if c.isdigit()]
+        max_existing = max((int(c) for c in existing_months), default=0)
         for m in range(max_existing + 1, TOTAL_MONTHS + 1):
             df[str(m)] = 0
 
-        # Ensure month columns are integers (not floats)
+        # Ensure all month columns are int (not float / NaN)
         month_cols = [str(i) for i in range(1, TOTAL_MONTHS + 1)]
         for col in month_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
         return df
 
     @staticmethod
