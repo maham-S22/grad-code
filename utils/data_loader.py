@@ -1,119 +1,65 @@
-"""
-utils/data_loader.py
-Safe Excel I/O with session_state caching and write-lock mechanism.
-"""
 import os
-import shutil
-import tempfile
 import pandas as pd
 import streamlit as st
 
-EXCEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Grad Proj.xlsx")
-TOTAL_MONTHS = 60
-RAW_SHEET = "Raw Data"
+# The exact working absolute path
+EXCEL_PATH = r"C:\Users\maham\Desktop\University(8)\Grad Proj dashboard\Grad Proj .xlsx"
 
 
-class ExcelManager:
-    """Load sheets into st.session_state (once per session) and write safely."""
+@st.cache_data(show_spinner=False)
+def load_specific_sheet(sheet_name):
+    """Load a single Excel sheet with cache. Casts all column names to str
+    to prevent pd.concat crashes from mixed int/str headers."""
+    try:
+        df = pd.read_excel(EXCEL_PATH, sheet_name=sheet_name, engine="openpyxl")
 
-    # ── Loading ──────────────────────────────────────────────────────────────
-    @staticmethod
-    def load_all(force: bool = False):
-        """Read every sheet into session_state['sheets'][sheet_name]."""
-        if "sheets" not in st.session_state or force:
-            st.session_state["sheets"] = {}
-        if not os.path.exists(EXCEL_PATH):
-            st.error(f"Excel file not found: `{EXCEL_PATH}`")
-            return
+        # 1. Prevent column duplication crashes
+        df.columns = df.columns.astype(str)
+        df = df.loc[:, ~df.columns.duplicated()].copy()
 
-        xl = pd.ExcelFile(EXCEL_PATH)
-        for name in xl.sheet_names:
-            if name not in st.session_state["sheets"] or force:
-                st.session_state["sheets"][name] = xl.parse(name)
+        # 2. Prevent Streamlit from displaying "None"
+        for col in df.columns:
+            if df[col].dtype == 'object' or pd.api.types.is_string_dtype(df[col]):
+                df[col] = df[col].fillna("")
+            else:
+                df[col] = df[col].fillna(0.0)
 
-    @staticmethod
-    def get(sheet: str) -> pd.DataFrame:
-        """Return a sheet dataframe from session_state, loading if needed."""
-        if "sheets" not in st.session_state or sheet not in st.session_state["sheets"]:
-            ExcelManager.load_all()
-        return st.session_state["sheets"].get(sheet, pd.DataFrame())
-
-    @staticmethod
-    def set(sheet: str, df: pd.DataFrame):
-        """Update a sheet in session_state without touching disk."""
-        if "sheets" not in st.session_state:
-            st.session_state["sheets"] = {}
-        st.session_state["sheets"][sheet] = df
-
-    # ── Saving ───────────────────────────────────────────────────────────────
-    @staticmethod
-    def save(sheet: str, df: pd.DataFrame) -> bool:
-        """
-        Write one updated sheet back to the Excel file safely:
-        1. Write all sheets (updated + rest) to a temp file.
-        2. Replace the original file with the temp file.
-        Returns True on success.
-        """
-        ExcelManager.set(sheet, df)           # update session_state first
-
-        # Collect all current sheets from session_state
-        all_sheets: dict[str, pd.DataFrame] = st.session_state.get("sheets", {})
-
-        # Write to a temp file in the same directory (same filesystem → atomic rename)
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            suffix=".xlsx",
-            dir=os.path.dirname(EXCEL_PATH),
-        )
-        try:
-            os.close(tmp_fd)                  # close raw fd; openpyxl opens by path
-            with pd.ExcelWriter(tmp_path, engine="openpyxl") as writer:
-                for name, frame in all_sheets.items():
-                    frame.to_excel(writer, sheet_name=name, index=False)
-            # os.replace is atomic on the same drive and works better than
-            # shutil.move on Windows when the destination already exists
-            os.replace(tmp_path, EXCEL_PATH)
-            return True
-        except PermissionError:
-            st.error(
-                "🔒 **Permission denied** — `Grad Proj.xlsx` is open in Excel (or another "
-                "program). **Close the file in Excel** and try again."
-            )
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-            return False
-        except Exception as e:
-            st.error(f"Save failed: {e}")
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-            return False
-
-    # ── Raw Data helpers ─────────────────────────────────────────────────────
-    @staticmethod
-    def get_raw_data() -> pd.DataFrame:
-        """Return Raw Data sheet, expanded to TOTAL_MONTHS columns."""
-        df = ExcelManager.get(RAW_SHEET).copy()
-        if df.empty:
-            return df
-        # Ensure the index column is called 'Period'
-        if df.columns[0] != "Period":
-            df.rename(columns={df.columns[0]: "Period"}, inplace=True)
-
-        # ── Coerce ALL column names to strings (pandas reads numeric headers as int) ──
-        df.columns = [str(c) for c in df.columns]
-
-        # Expand to 60 months — after rename, existing month cols are '1'..'36'
-        existing_months = [c for c in df.columns if c.isdigit()]
-        max_existing = max((int(c) for c in existing_months), default=0)
-        for m in range(max_existing + 1, TOTAL_MONTHS + 1):
-            df[str(m)] = 0
-
-        # Ensure all month columns are int (not float / NaN)
-        month_cols = [str(i) for i in range(1, TOTAL_MONTHS + 1)]
-        for col in month_cols:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
         return df
+    except Exception as e:
+        st.error(f"❌ Failed to load {sheet_name}. Error: {e}")
+        return pd.DataFrame()
 
-    @staticmethod
-    def save_raw_data(df: pd.DataFrame) -> bool:
-        """Persist the Raw Data dataframe back to Excel."""
-        return ExcelManager.save(RAW_SHEET, df)
+
+def save_sheet_to_excel(df, sheet_name):
+    """Atomic file-swap save: writes to a temp file first, then replaces
+    the original in one shot so the main file is never left in a corrupt state."""
+    try:
+        df.columns = df.columns.astype(str)
+        df_clean = df.loc[:, ~df.columns.duplicated()].copy()
+
+        # 1. Read the existing workbook safely
+        try:
+            all_sheets = pd.read_excel(EXCEL_PATH, sheet_name=None, engine="openpyxl")
+        except Exception:
+            all_sheets = {}
+
+        all_sheets[sheet_name] = df_clean
+
+        # 2. Write to a temporary ghost file first
+        temp_path = EXCEL_PATH.replace(".xlsx", "_temp.xlsx")
+        with pd.ExcelWriter(temp_path, engine="openpyxl", mode="w") as writer:
+            for s_name, s_df in all_sheets.items():
+                s_df.to_excel(writer, sheet_name=s_name, index=False)
+
+        # 3. ATOMIC SWAP: Instantly replace the real file with the perfect temp file
+        os.replace(temp_path, EXCEL_PATH)
+
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        # Clean up the ghost file if something failed
+        temp_path = EXCEL_PATH.replace(".xlsx", "_temp.xlsx")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        st.error(f"❌ Save Failed: {e}")
+        return False

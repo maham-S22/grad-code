@@ -144,7 +144,11 @@ def apply_theme():
             border: none !important;
             border-radius: 8px !important;
             font-weight: 600 !important;
-            padding: 0.5rem 1.5rem !important;
+            padding: 0.6rem 0.8rem !important;
+            white-space: normal !important;
+            height: auto !important;
+            min-height: 3.5rem !important;
+            line-height: 1.3 !important;
             transition: opacity 0.2s, transform 0.1s !important;
         }
         .stButton > button:hover {
